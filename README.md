@@ -1,4 +1,4 @@
-# A-Tiny-Interpreter
+# A-Tiny-C-Interpreter
 
 ## Introduction
 
