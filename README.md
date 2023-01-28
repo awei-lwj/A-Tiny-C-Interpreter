@@ -2,7 +2,7 @@
 
 ## Introduction
 
-Tiny-Interpreter是一个简易但功能完善的C语言解释器，也是一个能够自举的该项目是对项目[C4](https://github.com/rswier/c4)的重构。
+Tiny-Interpreter是一个简易但功能完善的C语言解释器，也是一个能够自举的C解释器，是对项目[C4](https://github.com/rswier/c4)的重构。
 
 - 实现了自己的虚拟机，仿照x86汇编指令设计并实现了自己的一个指令集，更加深入的了解计算机的工作原理。
 - 根据EBNF([Extended Backus-Naur Form](https://en.wikipedia.org/wiki/Extended_Backus%E2%80%93Naur_form))方法，手写递归下降分析器的方式实现词法/语法分析部分，没有采用常见的Flex/Bison自动工具分别生成词法分析器和语法分析器。
