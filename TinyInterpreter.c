@@ -3,48 +3,18 @@
 #include <memory.h>
 #include <string.h>
 
-// Not supporting the marco/struct
+#define int long long         // Boarding the address to work in the 64bit address
 
-// Frame
-// -- source code file ---> lexer ---> token stream ---> parser ---> assembly            
+int debug;       // Printing debug information
+int assembly;    // Print assembly and source information
 
+int token;       // Current token
 
-int token;           // Current token
-char *src, *old_src; // The pointer of the code source
-int poolSize;        // The default memory size of the text/data/stack in the programming
-int line;            // The current number of lines
+// ----------------------------------------------------------------
+// Now defining the instructions set/tokens and classes/identifiers 
+// and types of variables/functions/declarations/
 
-//----------------------------------------------------------------
-// The process will be divided into the following parts in the memory
-// 
-// +---------------------------------------------------------+ High address
-// |    Stack: Processing data related to function calls     |
-// |                      ..............                     |
-// |                             |                           |
-// |                             V                           |
-// |                                                         |
-// |                                                         |
-// |    Heap: Dynamically allocate memory for programs       |
-// +---------------------------------------------------------+
-// |    Bss segment: The uninitialized data segment          |
-// +---------------------------------------------------------+
-// |    Data segment: The initial stack segment              |
-// +---------------------------------------------------------+
-// |    Text segment: The code                               |
-// +---------------------------------------------------------+ Low address
-// So we need to create a virtual machine to maintain a heap for memory \
-// allocation
-//----------------------------------------------------------------
-
-// Pointer
-int *text;     // Code segment
-int *old_text; // Dump text segment
-int *stack;    // Stack segment
-char *data;    // Data segment
-
-// Storing the pc statement in the register
-// PC,SP,BP,AX        Virtual machine registers
-int *pc, *sp, *bp, ax, cycle;
+// Using this key points to analysis the source code
 
 // Instruction set based on the x86 instruction set
 enum
@@ -54,10 +24,7 @@ enum
     OPEN,READ,CLOS,PRTF,MALC,MSET,MCMP,EXIT
 };
 
-// ----------------------------------------------------------------
-
 // Lexical analysis
-// ----------------------------------------------------------------
 // Tokens and classes (operators last and in precedence order)
 enum
 {
@@ -66,47 +33,102 @@ enum
     Assign,Cond,Lor,Lan,Or,Xor,And,Eq,Ne,Lt,Gt,Le,Ge,Shl,Shr,Add,Sub,Mul,Div,Mod,Inc,Dec,Brak
 };
 
-// Identifier: The ID of the variable
-struct identifier
-{
-    int token; // The token returned by the identifier
-    int hash;
-
-    // Local variables
-    char *name; // The name of the local variable
-    int class;  // The class of the local variable
-    int type;   // The type of the local variable
-    int value;  // The value of the local variable
-
-    // Global variables
-    int Bclass;
-    int Btype;
-    int Bvalue;
-};
-
-int token_val;   // The value of the current token(mainly of number)
-int *current_id; // The current parsed ID
-int *symbols;    // The symbol table
-
-// fields of identifier
+// Identifier: The Id of the variable
+// The fields of identifier
 enum
 {
     Token,Hash,Name,Type,Class,Value,BType,BClass,BValue,IdSize
 };
 
-// Types of variables/functions
+// The types of the variables/functions
 enum
 {
     CHAR, INT, PTR
 };
 
-int *idmain;         // the main function
+// The types of the declaration
+enum
+{
+    Global, Local
+};
 
-// Grammar analysis
-int basetype;         // the type of a declaration, make it global for convenience
-int expr_type;       // the type of an expression
+// ----------------------------------------------------------------
 
-int index_of_bp;     // the index of the pointer on stack using for parsing the function
+
+
+// ----------------------------------------------------------------
+
+// The process will be divided into the following parts in the memory
+//
+// +---------------------------------------------------------+ High address
+// |    Stack: Processing data related to function calls     |
+// |                      ..............                     |
+// |                             |                           |
+// |                             V                           |
+// |                                                         |
+// |                                                         |
+// |    Heap: Dynamically allocate memory for programs       |
+// +---------------------------------------------------------+
+// |    BSS segment: The uninitialized data segment          |
+// +---------------------------------------------------------+
+// |    Data segment: The initial stack segment              |
+// +---------------------------------------------------------+
+// |    Text segment: The code                               |
+// +---------------------------------------------------------+ Low address
+//
+// So we need to create a virtual machine to maintain a heap for memory allocation
+
+int *text;         // The text segment(code)
+int *old_text;     // The old dump text segment
+int *stack;        // The stack segment
+char *data;        // The BSS segment: The uninitialized data segment
+int *id_main;       // The main function segment
+
+int poolSize;      // The pool size of the code_text/Stack/BSS segment(data segment)
+
+char *src, *old_src;   // The pointer to the source code string
+
+// ----------------------------------------------------------------
+
+
+// This virtual machine register used for storing the programming statement
+int *pc;          // PC
+int *bp;          // BP
+int *sp;          // SP
+int  ax;          // AX
+int cycle;
+
+// This argument is used for Lexical analyzer
+int *current_id;  // Current parsed ID
+int *symbols;     // Symbol table
+int line;         // Line number
+int token_val;    // The value of the current token (mainly for number)
+
+// This argument is used for Grammar analyzer
+// ----------------------------------------------------------------
+int base_type;    // The type of a declaration, making it global for convenience
+int expr_type;    // The type of an expression
+
+// Function analysis
+// 0: arg 1       1: arg 2       2: arg 3
+// 3: return address
+// 4. old bp pointer    <-     index of bp pointer
+// 5. local variable 1
+// 6: local variable 2
+int index_of_bp;       // The index of bp pointer on the stack
+
+// ----------------------------------------------------------------
+
+
+
+
+
+// ------------------------------------------------------------------------------------------------
+
+
+// Lexical analysis
+// ----------------------------------------------------------------
+
 
 // Using for the lexical analysis and Getting the next token in the source code
 // This function will ignore the spaces
@@ -122,17 +144,51 @@ void next()
         // Parsing the token stream
         if (token == '\n')
         {
+            if( assembly )
+            {
+                // Print the compile info
+                printf("%lld: %.*s",line, src-old_src,old_src);
+
+                old_src = src;
+
+                while( old_text < text )
+                {
+                    // Printing the Instruction set based on the x86 instruction set
+                    printf("%8.4s", & 
+                        "LEA ,IMM ,JMP ,CALL,JZ  ,JNZ ,ENT ,ADJ ,LEV ,LI  ,LC  ,SI  ,SC  ,PUSH,"
+                        "OR  ,XOR ,AND ,EQ  ,NE  ,LT  ,GT  ,LE  ,GE  ,SHL ,SHR ,ADD ,SUB ,MUL ,DIV ,MOD ,"
+                        "OPEN,READ,CLOS,PRTF,MALC,MSET,MCMP,EXIT"[*++old_text * 5]
+                    );
+
+                    if( *old_text <= ADJ )
+                    {
+                        printf(" %lld\n",*++old_text);
+                    }
+                    else
+                    {
+                        printf("\n");
+                    }
+
+                }
+
+            }
+
             line++;
         }
-        else if (token == '#') // Not supporting the macro
-        {
+        else if (token == '#') 
+        {    
+            // Not supporting the macro
             while (*src != 0 && *src != '\n')
             {
                 src++;
             }
+
         }
+
+        // Character analysis
         // ----------------------------------------------------------------
-        else if ((token >= 'a' && token <= 'z') || (token >= 'A' && token <= 'Z') || (token == '_')) // character
+        else if ((token >= 'a' && token <= 'z') || (token >= 'A' && token <= 'Z') 
+              || (token == '_') )
         {
             // Parsing the identifier
             last_pos = src - 1;
@@ -147,29 +203,33 @@ void next()
 
             // Searching for the existing identifier(linear search)
             current_id = symbols;
-
             while (current_id[Token])
             {
                 if (current_id[Hash] == hash && !memcmp((char *)current_id[Name], last_pos, src - last_pos))
                 {
                     // The token exits
                     token = current_id[Token];
-                    return;
+                    return ;
                 }
 
                 current_id = current_id + IdSize;
             }
 
             // Storing the new ID
-            current_id[Name] = (int)last_pos;
-            current_id[Hash] = hash;
+            current_id[Name]  = (int) last_pos;
+            current_id[Hash]  = hash;
+            current_id[Token] = Id;
 
-            token = current_id[Token] = Id;
+            token = Id;
 
             return;
         }
         // ----------------------------------------------------------------
-        else if (token >= '0' && token <= '9') // Parsing the number
+
+
+        // Number analysis
+        // ----------------------------------------------------------------
+        else if (token >= '0' && token <= '9') 
         {
             token_val = token - '0';
             if (token_val > 0)
@@ -179,10 +239,11 @@ void next()
                 {
                     token_val = token_val * 10 + *src++ -'0';
                 }
+        
             }
             else
             {
-                // Starting with number 0
+                // Starting with number 0  Hex Example: (0x250)
                 if (*src == 'x' || *src == 'X')
                 {
                     // Hex
@@ -190,9 +251,10 @@ void next()
                     while ((token >= '0' && token <= '9') || (token >= 'a' && token <= 'f') || 
                            (token >= 'A' && token <= 'F'))
                     {
-                        token_val = token_val * +(token & 15) + (token >= 'A' ? 9 : 0);
-                        token = *src++;
+                        token_val = token_val * 16 +(token & 15) + (token >= 'A' ? 9 : 0);
+                        token = *++src;
                     }
+
                 }
                 else
                 {
@@ -201,14 +263,44 @@ void next()
                     {
                         token_val = token_val * 8 + *src++ - '0';
                     }
+
                 }
+
             }
 
             token = Num;
             return;
         }
         // ----------------------------------------------------------------
-        else if (token == '"' || token == '\'') // String
+
+
+        // Comment analysis
+        // ----------------------------------------------------------------
+        else if ( token == '/' ) 
+        {
+            if ( *src == '/' )
+            {
+                // Skipping comments
+                while (*src != 0 && *src != '\n')
+                {
+                    ++src;
+                }
+
+            }
+            else
+            {
+                // Divide Operator
+                token = Div;
+                return;
+            }
+            
+        }
+        // -------------------------------------------------------------
+
+        
+        // String analysis
+        // ----------------------------------------------------------------
+        else if (token == '"' || token == '\'')
         {
             // Parsing string literal, currently, there are only supporting escape
             // characters is '\n', store the string literal into data
@@ -230,6 +322,7 @@ void next()
                 {
                     *data++ = token_val;
                 }
+
             }
 
             src++;
@@ -246,29 +339,14 @@ void next()
 
             return;
         }
-        // ----------------------------------------------------------------
-        // look ahead
-        else if (token == '/') // comment of //
-        {
-            if (*src == '/')
-            {
-                // Skipping comments
-                while (*src != 0 && *src != '\n')
-                {
-                    ++src;
-                }
-            }
-            else
-            {
-                // Divide Operator
-                token = Div;
-                return;
-            }
-        }
+        // -------------------------------------------------------------
+        
+
+        // Operator analysis
         // ----------------------------------------------------------------
         else if (token == '=')
         {
-            // parse '==' and '='
+            // Parsing '==' and '='
             if (*src == '=')
             {
                 src++;
@@ -283,7 +361,7 @@ void next()
         }
         else if (token == '+')
         {
-            // parse '+' and '++'
+            // Parsing '+' and '++'
             if (*src == '+')
             {
                 src++;
@@ -298,7 +376,7 @@ void next()
         }
         else if (token == '-')
         {
-            // parse '-' and '--'
+            // Parsing '-' and '--'
             if (*src == '-')
             {
                 src++;
@@ -313,7 +391,7 @@ void next()
         }
         else if (token == '!')
         {
-            // parse '!='
+            // Parsing '!='
             if (*src == '=')
             {
                 src++;
@@ -324,7 +402,7 @@ void next()
         }
         else if (token == '<')
         {
-            // parse '<=', '<<' or '<'
+            // Parsing '<=', '<<' or '<'
             if (*src == '=')
             {
                 src++;
@@ -344,7 +422,7 @@ void next()
         }
         else if (token == '>')
         {
-            // parse '>=', '>>' or '>'
+            // Parsing '>=', '>>' or '>'
             if (*src == '=')
             {
                 src++;
@@ -359,11 +437,12 @@ void next()
             {
                 token = Gt;
             }
+
             return;
         }
         else if (token == '|')
         {
-            // parse '|' or '||'
+            // Parsing '|' or '||'
             if (*src == '|')
             {
                 src++;
@@ -373,11 +452,12 @@ void next()
             {
                 token = Or;
             }
+
             return;
         }
         else if (token == '&')
         {
-            // parse '&' and '&&'
+            // Parsing '&' and '&&'
             if (*src == '&')
             {
                 src++;
@@ -387,6 +467,7 @@ void next()
             {
                 token = And;
             }
+
             return;
         }
         else if (token == '^')
@@ -416,130 +497,145 @@ void next()
         }
         else if (token == '~' || token == ';' || token == '{' || token == '}' || token == '(' || token == ')' || token == ']' || token == ',' || token == ':')
         {
-            // directly return the character as token;
+            // Directly returning the character as token;
             return;
         } // end if
 
     } // end while
 
     return;
+
 }
+
+// Interpreting the code 
+int eval()
+{
+    int op, *tmp;
+    cycle = 0;
+
+    while (1)
+    {
+        cycle++;
+        op = *pc++; // Getting the next operation code
+
+        // Printing the debug info
+        if( debug )
+        {
+            printf("%lld> %.4s",cycle, & 
+                "LEA ,IMM ,JMP ,CALL,JZ  ,JNZ ,ENT ,ADJ ,LEV ,LI  ,LC  ,SI  ,SC  ,PUSH,"
+                "OR  ,XOR ,AND ,EQ  ,NE  ,LT  ,GT  ,LE  ,GE  ,SHL ,SHR ,ADD ,SUB ,MUL ,DIV ,MOD ,"
+                "OPEN,READ,CLOS,PRTF,MALC,MSET,MCMP,EXIT"[op * 5]
+            );
+
+            if( op <= ADJ )
+            {
+                printf(" %lld\n", *pc);
+            }
+            else
+            {
+                printf("\n");
+            }
+
+        }
+
+        // ----------------------------------------------------------------
+        if (op == IMM)      { ax = *pc++; }               // Loading the immediate value to ax
+
+        else if (op == LC)  { ax = *(char *)ax; }         // Loading the character value to ax and storing into ax
+        else if (op == LI)  { ax = *(int *)ax;  }         // Loading Integer value to ax and storing into ax
+        else if (op == SC)  { ax = *(char *)*sp++ = ax; } // Saving the data as the character value into the address and Storing in the stack
+        else if (op == SI)  { *(int *)*sp++ = ax; }       // Saving the data as the integer value into the address and Storing in the stack
+        else if (op == PUSH){ *--sp = ax; }               // Pushing the value of ax into the stack
+
+        // Jump <addr>./a
+        else if (op == JMP) { pc = (int *)*pc; }           // Jumping to the next address
+
+        // "If" judgement
+        else if (op == JZ)  { pc = ax ? pc + 1 : (int *)*pc; } // Jumping to the next address if the ax is zero
+        else if (op == JNZ) { pc = ax ? (int *)*pc : pc + 1; } // Jumping to the next address if the ax isn't zero
+
+        else if (op == CALL){ *--sp = (int)(pc + 1); pc = (int *)*pc; } // Calling back the subroutine
+        
+    //  else if( op == RET )  { pc = (int *)*sp++; }              // Returning from the subroutine. Replacing by the "LEV"
+
+        // ENT <size>, make new call frame
+        else if (op == ENT) { *--sp = (int)bp; bp = sp; sp = sp - *pc++; }
+
+        // ADJ <size>, remove arguments from frame
+        else if (op == ADJ) { sp = sp + *pc++; } // Adding esp, <size>
+        else if (op == LEV) { sp = bp; bp = (int *)*sp++; pc = (int *)*sp++; } // Restoring call frame and pc
+
+        // LEA <offset>
+        else if (op == LEA) { ax = (int)(bp + *pc++); } // Loading address for arguments
+
+        // ----------------------------------------------------------------
+
+
+        // Operators
+        // ----------------------------------------------------------------
+        // (the first argument in the top of the stack) op (ax)
+        // After calculation, the parameters at the top of the stack will be pushed back, 
+        // and the results will be stored in register ax
+
+        else if (op == OR)   { ax = *sp++ | ax; }
+        else if (op == XOR)  { ax = *sp++ ^ ax; }
+        else if (op == AND)  { ax = *sp++ & ax; }
+        else if (op == EQ)   { ax = *sp++ == ax;}
+
+        else if (op == NE)   { ax = *sp++ != ax;}
+        else if (op == LT)   { ax = *sp++ < ax; }
+        else if (op == LE)   { ax = *sp++ <= ax;}
+        else if (op == GT)   { ax = *sp++ > ax; }
+        else if (op == GE)   { ax = *sp++ >= ax;}
+
+        else if (op == SHL)  { ax = *sp++ << ax;}
+        else if (op == SHR)  { ax = *sp++ >> ax;}
+        
+        else if (op == ADD)  { ax = *sp++ + ax; }
+        else if (op == SUB)  { ax = *sp++ - ax; }
+        else if (op == MUL)  { ax = *sp++ * ax; }
+        else if (op == DIV)  { ax = *sp++ / ax; }
+        else if (op == MOD)  { ax = *sp++ % ax; }
+
+        // ----------------------------------------------------------------
+
+
+        // Inline function
+        // ----------------------------------------------------------------
+        // Using C functions to bootstrap the program for supporting the virtual machine
+
+        else if (op == EXIT) { printf("Exit(%lld)\n", *sp); return *sp; }
+        else if (op == OPEN) { ax = open((char *)sp[1], sp[0]); }
+        else if (op == CLOS) { ax = close(*sp); }
+        else if (op == READ) { ax = read(sp[2], (char *)sp[1], *sp);}
+
+        else if (op == PRTF) { tmp = sp + pc[1]; ax = printf((char *)tmp[-1], tmp[-2], tmp[-3], tmp[-4], tmp[-5], tmp[-6]); }
+        else if (op == MALC) { ax = (int)malloc(*sp); }
+        else if (op == MSET) { ax = (int)memset((char *)sp[2], sp[1], *sp); }
+        else if (op == MCMP) { ax = memcmp((char *)sp[2], (char *)sp[1], *sp); }
+
+        // ----------------------------------------------------------------
+
+        else
+        {
+            // Erro Judgment
+            printf("Error: Unknown instruction: %lld\n", op);
+            return -1;
+        }
+
+    }
+
+    return 0;
+}
+
+// ----------------------------------------------------------------
+
+
+
+
 
 // Grammar analysis
 // ----------------------------------------------------------------
-
-// This function will be took as the entrance of the grammar analysis
-void program()
-{
-    next(); // Getting the next token
-    while (token > 0)
-    {
-        global_declaration();
-
-    }
-}
-
-// global variables
-void global_declaration()
-{
-    // EBNF
-    // global_declaration ::= enum_decl | variable_decl | function_decl
-    //
-    // enum_decl ::= 'enum' [id] '{' id ['=' 'num'] {',' id ['=' 'num'} '}'
-    //
-    // variable_decl ::= type {'*'} id { ',' {'*'} id } ';'
-    //
-    // function_decl ::= type {'*'} id '(' parameter_decl ')' '{' body_decl '}'
-
-    int type;       // type of the variable
-    int i;
-
-    basetype = INT; 
-
-    // Parsing the enum
-    if( token == Enum )
-    {
-        // enum [id] { awei = 985,school = 211 }
-        match(Enum);
-        if( token != '{' )
-        {
-            match(Id);   // Skipping the [id] part;         
-        }
-        if( token == '{' )
-        {
-            // Parsing the assignment part
-            match('{');
-            enum_declaration();
-            match('}');
-        }
-
-        match(';');
-        return ;
-    }
-
-    // Parsing type information
-    if( token == Int )
-    {
-        match(Int);
-    }
-    else if( token == Char )
-    {
-        match(Char);
-        basetype = CHAR;
-    }
-
-    // Parsing the common seperator variables declaration
-    while( token != ';' && token != '}' )
-    {
-        type = basetype;
-
-        while( token == MUL )
-        {
-            match(MUL);
-            type = type + PTR;
-        }
-
-        if( token != Id )
-        {
-            // Invalid declaration
-            printf("%d: Bad declaration\n", line);
-            exit(-1);
-        }
-        
-        if( current_id[Class])
-        {
-            // Identifier exits
-            printf("%d: Duplicate global declaration\n", line);
-            exit(-1);
-        }
-
-        match(Id);
-        current_id[Type] = type;
-
-        if( token == '(' )
-        {
-            current_id[Class] = Fun;
-            current_id[Value] = (int) (text + 1);   // The address of the function
-            function_declaration();
-        }
-        else
-        {
-            // Variable declaration
-            current_id[Class] = Glo;     // Global variable
-            current_id[Value] = (int) data;  // Assignment memory address
-            data = data + sizeof(int); 
-        }
-
-        if( token == ',' )
-        {
-            match(',');
-        }
-
-    } // end while
-
-    next();
-
-}
 
 void match(int tk)
 {
@@ -549,219 +645,684 @@ void match(int tk)
     }
     else
     {
-        printf("%d: expected token: %d\n", line, tk);
+        printf("%lld: expected token: %lld\n", line, tk);
         exit(-1);
     }
 }
 
-void enum_declaration()
+// The expression could be divided into two parts
+void expression(int level)
 {
-    int i = 0;
+    // 1. unity_unary ::= unit | unit unary_op | unary_op unit
+    // 2. expr        ::= unit_unary_op (bin_op unit_unary ...)
 
-    while( token != '}' )
+    int *id;
+    int tmp;
+    int *addr;
+
+    // Unary expression
+    // ----------------------------------------------------------------
+
     {
-        if( token != Id )
+        if( !token )
         {
-            printf("%d: Bad enum identifier %d\n", line, token);
+            printf("%lld: Unexpected token EOF of expression\n", line);
             exit(-1);
         }
 
-        next();
-
-        if( token == Assign )
+        // Constant expression
+        // ----------------------------------------------------------------
+        if( token == Num )         // INT
         {
-            next();
+            match(Num);
 
-            if( token != Num )
+            // Emitting code
+            *++text = IMM;
+            *++text = token_val;
+
+            expr_type = INT;
+        }
+        else if( token == '"' )    // CHAR
+        {
+            // p = "first line "      -->     p = "first line second line"
+            //     "second line"
+
+            // Emitting code
+            *++text = IMM;
+            *++text = token_val;
+
+            match('"');
+
+            // Storing the rest of the string
+            while( token == '"' )
             {
-                printf("%d: Bad enum initializer\n",line);  
-                exit(-1);      
+                match('"');
             }
 
-            i = token_val;
-            next();
+            // Appending the end of the string character '\0'
+            // All the data are default to 0, so we just move data one position forward
+            data = (char *)(((int)data + sizeof(int)) & (-sizeof(int)));
+            expr_type = PTR;
         }
+        // ----------------------------------------------------------------
 
-        current_id[Class] = Num;
-        current_id[Type]  = INT;
-        current_id[Value] = i++;
 
-        if( token == ',' )
+        // Sizeof
+        // ----------------------------------------------------------------
+        else if( token == Sizeof )
         {
-            next();
-        }
+            // Now only supporting "sizeof(int)" "sizeof(char)" "sizeof(*....)(pointer)"
 
-    }
+            match(Sizeof);
+            match('(');
+            expr_type = INT;
 
-}
-
-// Parsing the function
-// ----------------------------------------------------------------
-
-void function_declaration()
-{
-    // Parameter
-    match('(');
-    function_parameter();
-    match(')');
-
-    // Body
-    match('{');
-    function_body();
-  // match('}');
-
-    // Reason
-    // variable_decl 与 function_decl 是放在一起解析的，而 variable_decl 是以字符 ; 结束的。
-    // 而 function_decl 是以字符 } 结束的，若在此通过 match 消耗了 ‘;’ 字符，那么global_declaration 
-    // 外层的 while 循环就没法准确地知道函数定义已经结束。所以我将结束符的解析放在了global_declaration外层的 while 循环中。
-    
-    current_id = symbols;
-
-    // Unwind local variable declarations for all local variables.
-    while(current_id[Token])
-    {
-        if( current_id[Class] == Loc )
-        {
-            current_id[Class] = current_id[BClass];
-            current_id[Type]  = current_id[BType];
-            current_id[Value] = current_id[BValue];
-        }
-        current_id = current_id + IdSize;
-
-    }
-
-
-
-}
-
-void function_parameter()
-{
-    int type;
-    int params = 0;
-
-    while( token != ')' )
-    {
-        type = INT;
-
-        // Type matches
-        if( token == INT )
-        {
-            match(Int);
-        }
-        else if( token == Char )
-        {
-            type = CHAR;
-            match(Char);
-        }
-
-        // Pointer
-        while( token == Mul )
-        {
-            match(Mul);
-            type = type + PTR;
-        }
-
-        // Parameter name
-        if( token != Id )
-        {
-            printf("%d: Bad parameter declaration\n",line);
-            exit(-1);
-        }
-
-        if( current_id[Class] == Loc )
-        {
-            printf("%d: Duplicate parameter declaration\n",line);
-            exit(-1);
-        }
-
-        match(Id);
-
-        // Storing the local variable
-        current_id[BClass] = current_id[Class]; current_id[Class] = Loc;
-        current_id[BType]  = current_id[Type];  current_id[Type]  = type;
-        current_id[BValue] = current_id[Value]; current_id[Value] = params++; // index of current parameter
-
-        if( token == ',' )
-        {
-            match(',');
-        }
-    }
-
-    index_of_bp = params + 1;
-
-}
-
-void function_body()
-{
-    //{
-    //   1. local declarations 2. statement   
-    //}
-
-    int pos_local;     // the position of the local variables on the stack
-    int type;
-    pos_local = index_of_bp;
-
-    while( token == Int || token == Char )
-    {
-        basetype = (token == Int ) ? INT : CHAR;
-        match(token);
-
-        // local variables
-        while( token != ';' )
-        {
-            // Same as the global variable
-            type = basetype;
+            if( token == Int )
+            {
+                match(Int);
+            }
+            else if( token == Char )
+            {
+                match(Char);
+                expr_type = CHAR;
+            }
 
             while( token == Mul )
             {
                 match(Mul);
-                type = type + PTR;
+                expr_type = PTR + expr_type;
             }
 
-            if( token != Id )
-            {
-                // Invalid declaration
-                printf("%d: Bad local declaration\n",line);
-                exit(-1);
-            }
+            match(')');
+        
+            // Emitting code
+            *++text = IMM;
+            *++text = (expr_type == CHAR) ? sizeof(char) : sizeof(int);
 
-            if( current_id[Class] == Loc )
-            {
-                // Identifier exits
-                printf("%d: Duplicate local declaration\n",line);
-                exit(-1);
-            }
+            expr_type = INT;
+        }
+        // ----------------------------------------------------------------
+
+
+        // Variable and function
+        // ----------------------------------------------------------------
+        else if( token == Id )
+        {
+            // Now only supporting for
+            // 1. function_call
+            // 2. enum variable
+            // 3. global/local variable
 
             match(Id);
 
-            // Storing the local variable
-            current_id[BClass] = current_id[Class]; current_id[Class] = Loc;
-            current_id[BType]  = current_id[Type];  current_id[Type]  = type;
-            current_id[BValue] = current_id[Value]; current_id[Value] = ++pos_local; // the index of the current parameter
+            id = current_id;
 
-            if( token == ',' )
+            if( token == '(' )
             {
-                match(',');
+                // Function call
+                match('(');
+
+                // Parsing the parameters
+                // Comparing with the standard C,we put parameter on the stack in order
+                tmp = 0; // the number of arguments
+                while( token != ')' )
+                {
+                    expression(Assign);
+                    *++text = PUSH;
+
+                    tmp++;
+
+                    if( token == ',' )
+                    {
+                        match(',');
+                    }
+                }
+
+                match(')');
+
+                // Parsing the function type declaration
+                // Emitting code
+                if( id[Class] == Sys )
+                {
+                    *++text = id[Value];  // System function
+                }
+                else if( id[Class] == Fun )
+                {
+                    *++text = CALL; 
+                    *++text = id[Value]; // Fun function
+                }
+                else
+                {
+                    printf("%lld: Bad function call\n", line);
+                    exit(-1);
+                }
+
+                // Clearing the stack for the arguments
+                if( tmp > 0 )
+                {
+                    *++text = ADJ;
+                    *++text = tmp;
+                }
+
+                expr_type = id[Type];
+
+            } 
+
+            else if( id[Class] == Num )
+            {
+                // Enum variables
+                *++text = IMM;
+                *++text = id[Value];
+                expr_type = INT;
+            }
+            else
+            {
+                // Global/Local variables
+                if( id[Class] == Loc )
+                {
+                    *++text = LEA;
+                    *++text = index_of_bp - id[Value];
+                }
+                else if( id[Class] == Glo )
+                {
+                    *++text = IMM;
+                    *++text = id[Value];
+                }
+                else
+                {
+                    printf("%lld: undefined variable\n", line);
+                    exit(-1);
+                }
+
+                // Emitting code
+                // Loading the value(default) of this address in the ax
+                expr_type = id[Type];
+                *++text = (expr_type == CHAR ) ? LC : LI; 
+
+            }
+
+        } // end if( variable and function )
+        // ----------------------------------------------------------------
+
+
+        // Forced conversion
+        // ----------------------------------------------------------------
+        else if( token == '(' )
+        {
+            match('(');
+
+            if( token == Int || token == Char )
+            {
+                // Cast type
+                tmp = (token == Char) ? CHAR : INT;
+
+                match(token);
+
+                while(token == Mul)
+                {
+                    match(Mul);
+                    tmp = tmp + PTR;
+                }
+
+                match(')');
+
+                // Cast has precedence as Inc
+                expression(Inc);
+
+                expr_type = tmp;
+            }
+            else
+            {
+                // Normal expression
+                expression(Assign);
+                match(')');
             }
 
         }
 
-        match(';');
+        // Pointer
+        else if( token == Mul )
+        {
+            // Deference *<addr>
+            match(Mul);
+            expression(Inc);
+
+            if( expr_type >= PTR )
+            {
+                expr_type = expr_type - PTR;
+            }
+            else
+            {
+                printf("%lld: Bad deference\n",line);
+                exit(-1);
+            }
+
+            *++text = (expr_type == CHAR) ? LC : LI;
+        }
+        else if( token == And )
+        {
+            // Get the address
+            match(And);
+            expression(Inc);
+
+            if(*text == LC || *text == LI)
+            {
+                text--;
+            }
+            else
+            {
+                printf("%lld: Bad address\n",line);
+                exit(-1);
+            }
+
+            expr_type = expr_type + PTR;
+        }
+        else if( token == '!' )
+        {
+            match('!');
+            expression(Inc);
+
+            // Emitting code
+            *++text = PUSH;
+            *++text = IMM;
+            *++text = 0;
+            *++text = EQ;
+
+            expr_type = INT;
+        }
+        else if( token == '~' )
+        {
+            match('~');
+            expression(Inc);
+
+            // Emitting code, use <expr> XOR -1
+            *++text = PUSH;
+            *++text = IMM;
+            *++text = -1;
+            *++text = XOR;
+
+            expr_type = INT;
+        }
+        else if( token == Add )
+        {
+            match(Add);
+            expression(Inc);
+
+            expr_type = INT;
+        }
+        else if( token == Sub )
+        {
+            match(Sub);
+
+            if( token == Num )
+            {
+                *++text = IMM;
+                *++text = -token_val;
+                match(Num);
+            }
+            else
+            {
+                *++text = IMM;
+                *++text = -1;
+                *++text = PUSH;
+                expression(Inc);
+                *++text = MUL;
+            }
+
+            expr_type = INT;
+        }
+        else if( token == Inc || token == Dec )
+        {
+            tmp = token;
+            match(token);
+            expression(Inc);
+
+            if( *text == LC )
+            {
+                *text = PUSH;    // Duplicate the address
+                *++text = LC;
+            }
+            else if( *text == LI )
+            {
+                *text = PUSH;
+                *++text = LI;
+            }
+            else
+            {
+                printf("%lld: Bad lvalue of pre-increment\n",line);
+                exit(-1);
+            }
+
+            *++text = PUSH;
+            *++text = IMM;
+
+            *++text = (expr_type > PTR) ? sizeof(int) : sizeof(char);
+            *++text = (tmp == Inc) ? ADD : SUB;
+            *++text = (expr_type == CHAR) ? SC : SI;
+        }
+        else
+        {
+            printf("%lld: Bad expression\n",line);
+            exit(-1);
+        }
+
+        // ----------------------------------------------------------------
 
     }
 
-    // Saving the stack size for local variables
-    *++text = ENT;
-    *++text = pos_local - index_of_bp;
+    // ----------------------------------------------------------------
 
-    // Statement
-    while( token != '}' )
+
+    // Binary operator and postfix operators. 
+    // ----------------------------------------------------------------
     {
-        statement();
-    }
+        while( token >= level )
+        {
+            tmp = expr_type;
 
-    // Leaving the sub function
-    *++text = LEV;
+            // a = (expression)->IMM <addr> LC/LI
+            if( token == Assign )
+            {
+                match(Assign);
+                if( *text == LC || *text == LI )
+                {
+                    // Storing the lvalue's pointer
+                    *text = PUSH;
+                }
+                else
+                {
+                    printf("%lld: Bad lvalue in assignment\n",line);
+                    exit(-1);
+                }
+
+                expression(Assign);
+
+                expr_type = tmp;
+                *++text = (expr_type == CHAR ) ? SC : SI;
+            }
+            else if( token == Cond )   // expression ? a : b
+            {
+                match(Cond);
+                *++text = JZ;
+
+                addr = ++text;
+
+                expression(Assign);
+
+                if(token == ':')
+                {
+                    match(':');
+                }
+                else
+                {
+                    printf("%lld: Missing colon in expression\n", line);
+                    exit(-1);
+                }
+
+                *addr = (int)(text + 3);
+                *++text = JMP;
+                addr = ++text;
+                expression(Cond);
+                *addr = (int)(text + 1);
+            }
+            else if( token == Lor )   // '||'
+            {
+                match(Lor);
+                *++text = JNZ;
+                addr = ++text;
+                expression(Lan);
+                *addr = (int)(text + 1);
+                expr_type = INT;
+            }
+            else if( token == Lan )   // '&&'
+            {
+                match(Lan);
+                *++text = JZ;
+                addr = ++text;
+                expression(Or);
+                *addr = (int)(text + 1);
+                expr_type = INT;
+            }
+
+            // Mathematical operators: |, ^, &, ==, != <=, >=, <, >, <<, >>, +, -, *, /, %
+            // ----------------------------------------------------------------
+            else if ( token == Or )       // '|'
+            {
+                match(Or);
+                *++text = PUSH;
+                expression(Xor);
+                *++text = OR;
+                expr_type = INT;
+            }
+            else if ( token == Xor )       // '^'
+            {
+                match(Xor);
+                *++text = PUSH;
+                expression(And);
+                *++text = XOR;
+                expr_type = INT;
+            }
+            else if ( token == And )       // '&'
+            {
+                match(And);
+                *++text = PUSH;
+                expression(Eq);
+                *++text = AND;
+                expr_type = INT;
+            }
+            else if ( token == Eq )       // ==
+            {
+                match(Eq);
+                *++text = PUSH;
+                expression(Ne);
+                *++text = EQ;
+                expr_type = INT;
+            }
+            else if ( token == Ne )       // '!='
+            {
+                match(Ne);
+                *++text = PUSH;
+                expression(Lt);
+                *++text = NE;
+                expr_type = INT;
+            }
+            else if ( token == Lt )       // '<'
+            {
+                match(Lt);
+                *++text = PUSH;
+                expression(Shl);
+                *++text = LT;
+                expr_type = INT;
+            }
+            else if ( token == Gt )        // '>'
+            {
+                match(Gt);
+                *++text = PUSH;
+                expression(Shl);
+                *++text = GT;
+                expr_type = INT;
+            }
+            else if ( token == Le )          // <=
+            {
+                match(Le);
+                *++text = PUSH;
+                expression(Shl);
+                *++text = LE;
+                expr_type = INT;
+            }
+            else if ( token == Ge )          // >=
+            {
+                match(Ge);
+                *++text = PUSH;
+                expression(Shl);
+                *++text = GE;
+                expr_type = INT;
+            }
+            else if ( token == Shl )          // <<
+            {
+                match(Shl);
+                *++text = PUSH;
+                expression(Add);
+                *++text = SHL;
+                expr_type = INT;
+            }
+            else if ( token == Shr )          // >>
+            {
+                match(Shr);
+                *++text = PUSH;
+                expression(Add);
+                *++text = SHR;
+                expr_type = INT;
+            }
+            else if ( token == Add ) 
+            {
+                // add
+                match(Add);
+                *++text = PUSH;
+                expression(Mul);
+
+                expr_type = tmp;
+                if (expr_type > PTR) 
+                {
+                    // pointer type, and not `char *`
+                    *++text = PUSH;
+                    *++text = IMM;
+                    *++text = sizeof(int);
+                    *++text = MUL;
+                }
+
+                *++text = ADD;
+            }
+            else if (token == Sub) 
+            {
+                // sub
+                match(Sub);
+                *++text = PUSH;
+                expression(Mul);
+
+                if (tmp > PTR && tmp == expr_type) 
+                {
+                    // pointer subtraction
+                    *++text = SUB;
+                    *++text = PUSH;
+                    *++text = IMM;
+                    *++text = sizeof(int);
+                    *++text = DIV;
+                    expr_type = INT;
+                } 
+                else if (tmp > PTR) 
+                {
+                    // pointer movement
+                    *++text = PUSH;
+                    *++text = IMM;
+                    *++text = sizeof(int);
+                    *++text = MUL;
+                    *++text = SUB;
+                    expr_type = tmp;
+                } 
+                else 
+                {
+                    // numeral subtraction
+                    *++text = SUB;
+                    expr_type = tmp;
+                }
+
+            }
+            else if ( token == Mul )      // a * b
+            {
+                match(Mul);
+                *++text = PUSH;
+                expression(Inc);
+                *++text = MUL;
+                expr_type = tmp;
+            }
+            else if ( token == Div )       // a / b
+            {
+                match(Div);
+                *++text = PUSH;
+                expression(Inc);
+                *++text = DIV;
+                expr_type = tmp;
+            }
+            else if (token == Mod)         // a % b
+            {
+                match(Mod);
+                *++text = PUSH;
+                expression(Inc);
+                *++text = MOD;
+                expr_type = tmp;
+            }
+            // ----------------------------------------------------------------
+
+            else if( token == Inc || token == Dec )
+            {
+                // Getting its original value from the ax
+                // Increasing/Decreasing the value to the variable
+
+                if( *text == LI )
+                {
+                    *text = PUSH;
+                    *++text = LI;
+                }
+                else if( *text == LC )
+                {
+                    *text = PUSH;
+                    *++text = LC;
+                }
+                else
+                {
+                    printf("%lld: Bad value in increment\n", line);
+                    exit(-1);
+                }
+
+                *++text = PUSH;
+                *++text = IMM;
+                *++text = (expr_type > PTR) ? sizeof(int) : sizeof(char);
+                *++text = (token == Inc) ? ADD : SUB;
+                *++text = (expr_type == CHAR) ? SC : SI;
+                *++text = PUSH;
+                *++text = IMM;
+                *++text = (expr_type > PTR) ? sizeof(int) : sizeof(char);
+                *++text = (token == Inc) ? SUB : ADD;
+
+                match(token);
+
+            }
+            else if ( token == Brak )
+            {
+                // array access var[xx]
+                match(Brak);
+                *++text = PUSH;
+                expression(Assign);
+                match(']');
+
+                if (tmp > PTR) 
+                {
+                    // pointer, `not char *`
+                    *++text = PUSH;
+                    *++text = IMM;
+                    *++text = sizeof(int);
+                    *++text = MUL;
+                }
+                else if (tmp < PTR) 
+                {
+                    printf("%lld: Pointer type expected\n", line);
+                    exit(-1);
+                }
+
+                expr_type = tmp - PTR;
+                *++text = ADD;
+                *++text = (expr_type == CHAR) ? LC : LI;
+            }
+            else
+            {
+                printf("%lld: Compiler error, The token = %lld\n", line, token);
+                exit(-1);
+            }
+
+        }
+
+    }
 
 }
 
@@ -882,133 +1443,388 @@ void statement()
         match(';');
     }
 
+
 }
 
-// ----------------------------------------------------------------
-
-// Analysis of the code expression
-void expression(int level)
+void enum_declaration()
 {
-    // TODO: Implement
-}
+    int i;
+    i = 0;
 
-// Interpreting the code and Entering the virtual machine
-int eval()
-{
-    int op, *tmp;
-
-    while (1)
+    while( token != '}' )
     {
-        // Getting the next operation code
-        op = *pc++;
-
-        if (op == IMM) { ax = *pc++; } // Loading the immediate value to ax
-
-        else if (op == LC)  { ax = *(char *)ax; }         // Loading the character value to ax and storing into ax
-        else if (op == LI)  { ax = *(int *)ax;  }         // Loading Integer value to ax and storing into ax
-        else if (op == SC)  { ax = *(char *)*sp++ = ax; } // Saving the data as the character value into the address and Storing in the stack
-        else if (op == SI)  { *(int *)*sp++ = ax; }       // Saving the data as the integer value into the address and Storing in the stack
-        else if (op == PUSH){ *--sp = ax; }               // Pushing the value of ax into the stack
-
-        // jump <addr>
-        else if (op == JMP) { pc = (int *)pc; }           // Jumping to the next address
-
-        // "If" judgement
-        else if (op == JZ)  { pc == ax ? pc + 1 : (int *)pc; } // Jumping to the next address if the ax is zero
-        else if (op == JNZ) { pc == ax ? (int *)pc : pc + 1; } // Jumping to the next address if the ax isn't zero
-
-        // *!* Callback subroutine
-        // ----------------------------------------------------------------
-        // We should not use the "JMP", because when the function are returning from the subroutine we need to
-        // store the address of the "JMP" address
-        // So we need to store the address of the pc
-        else if (op == CALL)
+        if( token != Id )
         {
-            *--sp = (int)(pc + 1);
-            pc = (int *)*pc;
-        } 
-        // Calling back the subroutine
-    //  else if( op == RET )  { pc = (int *)*sp++; }              // Returning from the subroutine. Replacing by the "LEV"
-
-        // ENT <size>, make new call frame
-        else if (op == ENT) { *--sp = (int)bp; bp = sp; sp = sp - *pc++; }
-
-        // ADJ <size>, remove arguments from frame
-        else if (op == ADJ) { sp = sp + *pc++; } // Adding esp, <size>
-        else if (op == LEV) { sp = bp; bp = (int *)*sp++; pc = (int *)*sp++; } // Restoring call frame and pc
-
-        // LEA <offset>
-        else if (op == LEA) { ax = (int)bp + *pc++; } // Loading address for arguments
-
-        // ----------------------------------------------------------------
-
-        // *!* Operator
-        // ----------------------------------------------------------------
-        // (the first argument in the top of the stack) op (ax)
-        // After calculation, the parameters at the top of the stack will be pushed back, \
-        // and the results will be stored in register ax
-
-        else if (op == OR)   { ax = *sp++ | ax; }
-        else if (op == XOR)  { ax = *sp++ ^ ax; }
-        else if (op == AND)  { ax = *sp++ & ax; }
-        else if (op == EQ)   { ax = *sp++ == ax;}
-
-        else if (op == NE)   { ax = *sp++ != ax;}
-        else if (op == LT)   { ax = *sp++ < ax; }
-        else if (op == LE)   { ax = *sp++ <= ax;}
-        else if (op == GT)   { ax = *sp++ > ax; }
-        else if (op == GE)   { ax = *sp++ >= ax;}
-
-        else if (op == SHL)  { ax = *sp++ << ax;}
-        else if (op == SHR)  { ax = *sp++ >> ax;}
-        else if (op == ADD)  { ax = *sp++ + ax; }
-        else if (op == SUB)  { ax = *sp++ - ax; }
-        else if (op == MUL)  { ax = *sp++ * ax; }
-        else if (op == DIV)  { ax = *sp++ / ax; }
-        else if (op == MOD)  { ax = *sp++ % ax; }
-
-        // ----------------------------------------------------------------
-
-        // *!* Built-in functions
-        // ----------------------------------------------------------------
-        // Using C functions to bootstrap the program for supporting the virtual machine
-
-        else if (op == EXIT) { printf("Exit(%d)", *sp); return *sp; }
-        else if (op == OPEN) { ax = open((char *)sp[1], sp[0]); }
-        else if (op == CLOS) { ax = close(*sp); }
-        else if (op == READ) { ax = read(sp[2], (char *)sp[1], *sp);}
-
-        else if (op == PRTF)
-        {
-            tmp = sp + pc[1];
-            ax = printf((char *)tmp[-1], tmp[-2], tmp[-3], tmp[-4], tmp[-5], tmp[-6]);
+            printf("%lld: Bad enum identifier %lld\n", line, token);
+            exit(-1);
         }
 
-        else if (op == MALC) { ax = (int)malloc(*sp); }
-        else if (op == MSET) { ax = (int)memset((char *)sp[2], sp[1], *sp); }
-        else if (op == MCMP) { ax = memcmp((char *)sp[2], (char *)sp[1], *sp); }
-        else
+        next();
+
+        if( token == Assign )
         {
-            // Erro Judgment
-            printf("Error: Unknown instruction: %d\n", op);
-            return -1;
+            next();
+
+            if( token != Num )
+            {
+                printf("%lld: Bad enum initializer\n",line);  
+                exit(-1);      
+            }
+
+            i = token_val;
+            next();
+        }
+
+        current_id[Class] = Num;
+        current_id[Type]  = INT;
+        current_id[Value] = i++;
+
+        if( token == ',' )
+        {
+            next();
         }
 
     }
 
-    return 0;
 }
+
+void function_parameter()
+{
+    int type;
+    int params;
+
+    params = 0;
+
+    while( token != ')' )
+    {
+        type = INT;
+
+        // Type matches
+        if( token == Int )
+        {
+            match(Int);
+        }
+        else if( token == Char )
+        {
+            type = CHAR;
+            match(Char);
+        }
+
+        // Pointer
+        while( token == Mul )
+        {
+            match(Mul);
+            type = type + PTR;
+        }
+
+        // Parameter name
+        if( token != Id )
+        {
+            printf("%lld: Bad parameter declaration\n", line);
+            exit(-1);
+        }
+
+        if( current_id[Class] == Loc )
+        {
+            printf("%lld: Duplicate parameter declaration\n",line);
+            exit(-1);
+        }
+
+        match(Id);
+
+        // Storing the local variable
+        current_id[BClass] = current_id[Class]; 
+        current_id[Class]  = Loc;
+
+        current_id[BType]  = current_id[Type];  
+        current_id[Type]   = type;
+
+        current_id[BValue] = current_id[Value]; 
+        current_id[Value] = params++;      // the index of current parameter
+
+        if( token == ',' )
+        {
+            match(',');
+        }
+    }
+
+    index_of_bp = params + 1;
+
+}
+
+void function_body()
+{
+    //{
+    //   1. local declarations 2. statement   
+    //}
+
+    int pos_local;     // the position of the local variables on the stack
+    int type;
+    pos_local = index_of_bp;
+
+    while( token == Int || token == Char )
+    {
+        // Local variable is as the same as the global variable
+        base_type = (token == Int ) ? INT : CHAR;
+        match(token);
+
+        while( token != ';' )
+        {
+            
+            type = base_type;
+
+            while( token == Mul )
+            {
+                match(Mul);
+                type = type + PTR;
+            }
+
+            if( token != Id )
+            {
+                // Invalid declaration
+                printf("%lld: Bad local declaration\n",line);
+                exit(-1);
+            }
+
+            if( current_id[Class] == Loc )
+            {
+                // Identifier exits
+                printf("%lld: Duplicate local declaration\n",line);
+                exit(-1);
+            }
+
+            match(Id);
+
+            // Storing the local variable
+            current_id[BClass] = current_id[Class]; 
+            current_id[Class]  = Loc;
+
+            current_id[BType]  = current_id[Type];  
+            current_id[Type]   = type;
+
+            current_id[BValue] = current_id[Value]; 
+            current_id[Value]  = ++pos_local; // the index of the current parameter
+
+            if( token == ',' )
+            {
+                match(',');
+            }
+
+        }
+
+        match(';');
+
+    }
+
+    // Saving the stack size for local variables
+    *++text = ENT;
+    *++text = pos_local - index_of_bp;
+
+    // Statement
+    while( token != '}' )
+    {
+        statement();
+    }
+
+    // Leaving the sub function
+    *++text = LEV;
+
+}
+
+void function_declaration()
+{
+    // Parameter
+    match('(');
+    function_parameter();
+    match(')');
+
+    // Body
+    match('{');
+    function_body();
+  // match('}');
+
+    // Reason
+    // variable_decl 与 function_decl 是放在一起解析的，而 variable_decl 是以字符 ; 结束的。
+    // 而 function_decl 是以字符 } 结束的，若在此通过 match 消耗了 ‘;’ 字符，那么global_declaration 
+    // 外层的 while 循环就没法准确地知道函数定义已经结束。所以我将结束符的解析放在了global_declaration外层的 while 循环中。
+    
+    current_id = symbols;
+
+    // Unwind local variable declarations for all local variables.
+    while(current_id[Token])
+    {
+        if( current_id[Class] == Loc )
+        {
+            current_id[Class] = current_id[BClass];
+            current_id[Type]  = current_id[BType];
+            current_id[Value] = current_id[BValue];
+        }
+
+        current_id = current_id + IdSize;
+
+    }
+
+}
+
+// Global variables
+void global_declaration()
+{
+    // EBNF
+    // global_declaration ::= enum_decl | variable_decl | function_decl
+    //
+    // enum_decl ::= 'enum' [id] '{' id ['=' 'num'] {',' id ['=' 'num'} '}'
+    //
+    // variable_decl ::= type {'*'} id { ',' {'*'} id } ';'
+    //
+    // function_decl ::= type {'*'} id '(' parameter_decl ')' '{' body_decl '}'
+
+    int type;       // the actual type of the variable
+    int i;
+
+    base_type = INT; 
+
+    // Parsing the enum
+    if( token == Enum )
+    {
+        // enum [id] { awei = 985,school = 211 }
+        match(Enum);
+        if( token != '{' )
+        {
+            match(Id);   // Skipping the [id] part;         
+        }
+        if( token == '{' )
+        {
+            // Parsing the assignment part
+            match('{');
+            enum_declaration();
+            match('}');
+        }
+
+        match(';');
+        return ;
+    }
+
+    // Parsing type information
+    if( token == Int )
+    {
+        match(Int);
+    }
+    else if( token == Char )
+    {
+        match(Char);
+        base_type = CHAR;
+    }
+
+    // Parsing the common independent variables declaration
+    while( token != ';' && token != '}' )
+    {
+        type = base_type;
+
+        // Pointer type
+        while( token == Mul )
+        {
+            match(Mul);
+            type = type + PTR;
+        }
+
+        if( token != Id )
+        {
+            // Invalid global declaration
+            printf("%lld: Bad global declaration\n", line);
+            exit(-1);
+        }
+        
+        if( current_id[Class])
+        {
+            // Identifier exits
+            printf("%lld: Duplicate global declaration\n", line);
+            exit(-1);
+        }
+
+        match(Id);
+        current_id[Type] = type;
+
+        if( token == '(' )
+        {
+            current_id[Class] = Fun;
+            current_id[Value] = (int) (text + 1);   // The address of the function
+
+            function_declaration();
+        }
+        else
+        {
+            // Variable declaration
+            current_id[Class] = Glo;         // Global variable
+            current_id[Value] = (int) data;  // Assignment memory address
+
+            data = data + sizeof(int); 
+        }
+
+        if( token == ',' )
+        {
+            match(',');
+        }
+
+    } // end while
+
+    next();
+
+}
+
+// ----------------------------------------------------------------
+
+void program()
+{
+    // Getting the next token
+    next(); 
+    
+    while (token > 0)
+    {
+        global_declaration();
+    }
+
+}
+
+
+#undef int          // Mac/clang needs this to compile
+
+// ------------------------------------------------------------------------------------------------
+
+
+
+
 
 int main(int argc, char **argv)
 {
+    #define int long long       // Working in the 64bits address space
+
     int i, fd; // The file descriptor
+    int *tmp;
 
     argc--;
     argv++;
 
-    poolSize = 512 * 1024; // Arbitrary memory size, 512KB
-    line = 1;
+    // Parsing the arguments
+    // ----------------------------------------------------------------
+    if( argc > 0 && **argv == '-' && (*argv)[1] == 's' )
+    {
+        assembly = 1;
+        --argc;
+        ++argv;
+    }
+    
+    if( argc > 0 && **argv == '-' && (*argv)[1] == 'd' )
+    {
+        debug = 1;
+        --argc;
+        ++argv;
+    }
 
+    if( argc < 1 )
+    {
+        printf("Usage: xc [-s] [-d] filename ...\n");    
+        return -1;
+    }
 
     // Opening the file
     if ((fd = open(*argv, 0)) < 0)
@@ -1018,35 +1834,41 @@ int main(int argc, char **argv)
         return -1;
     }
 
+    // ----------------------------------------------------------------
+
+    poolSize = 512 * 1024; // Arbitrary memory size, 512KB
+    line = 1;
+
+
     // ---------------------------------------------------------------------
     // Creating the virtual machine
 
     // Allocating the memory for virtual machine
-    if (!(text = old_text = malloc(poolSize)))
+    if (!(text = malloc(poolSize)))
     {
         // Error allocating memory
-        printf("The Tiny-C-Interpreter could not allocate (%d) for text area\n", poolSize);
+        printf("The Tiny-C-Interpreter could not allocate (%lld) for text area\n", poolSize);
         return -1;
     }
 
     if (!(data = malloc(poolSize)))
     {
         // Error allocating memory
-        printf("The Tiny-C-Interpreter could not allocate (%d) for data area\n", poolSize);
+        printf("The Tiny-C-Interpreter could not allocate (%lld) for data area\n", poolSize);
         return -1;
     }
 
     if (!(stack = malloc(poolSize)))
     {
         // Error allocating memory
-        printf("The Tiny-C-Interpreter could not allocate (%d) for stack area\n", poolSize);
+        printf("The Tiny-C-Interpreter could not allocate (%lld) for stack area\n", poolSize);
         return -1;
     }
 
     if (!(symbols = malloc(poolSize)))
     {
         // Error allocating memory
-        printf("The Tiny-C-Interpreter could not allocate (%d) for symbol table\n", poolSize);
+        printf("The Tiny-C-Interpreter could not allocate (%lld) for symbol table\n", poolSize);
         return -1;
     }
 
@@ -1055,30 +1877,32 @@ int main(int argc, char **argv)
     memset(stack  , 0, poolSize);
     memset(symbols, 0, poolSize);
 
-    // Instruction set
-    bp = sp = (int *)((int)stack + poolSize);
-    ax = 0;
+    old_text = text;
 
-    // *!*  Test 1: Testing the instructions set
+   
+
+    // Test 1: Testing the instructions set
     //----------------------------------------------------------------
-    /**
-    i = 0;
+    // bp = sp = (int *)((int)stack + poolSize);
+    // ax = 0;
+    // i = 0;
 
-    text[i++] = IMM;
-    text[i++] = 10;
-    text[i++] = PUSH;
-    text[i++] = IMM;
-    text[i++] = 20;
-    text[i++] = ADD;
-    text[i++] = PUSH;
-    text[i++] = EXIT;
 
-    pc = text;
-    **/
+    // text[i++] = IMM;
+    // text[i++] = 10;
+    // text[i++] = PUSH;
+    // text[i++] = IMM;
+    // text[i++] = 20;
+    // text[i++] = ADD;
+    // text[i++] = PUSH;
+    // text[i++] = EXIT;
+
+    // pc = text;
     // ----------------------------------------------------------------
 
-    // Adding the keyword/library to the symbol table before parsing
 
+
+    // Adding the keyword/library to the symbol table before parsing
     src = "char else enum if int return sizeof while "
           "open read close printf malloc memset memcmp exit void main";
 
@@ -1086,7 +1910,8 @@ int main(int argc, char **argv)
     i = Char;
     while( i <= While )
     {
-        next(); current_id[Token] = i++;
+        next(); 
+        current_id[Token] = i++;
     }
 
     // Adding library
@@ -1099,27 +1924,21 @@ int main(int argc, char **argv)
         current_id[Value] = i++;   
     }
 
-    next(); current_id[Token] = Char; // Handling void type
-    next(); idmain = current_id; // Keeping track of main
+    next(); 
+    current_id[Token] = Char; // Handling void type
+
+    next(); 
+    id_main = current_id; // Keeping track of main
 
 
     // ----------------------------------------------------------------
     // Reading the source code file
 
-    // Opening the file
-    if ((fd = open(*argv, 0)) < 0)
-    {
-        // Error opening
-        printf("The Tiny-C-Interpreter could not open (%s)\n", *argv);
-        return -1;
-    }
-   
-
     // Allocating the memory
     if (!(src = old_src = malloc(poolSize)))
     {
         // Error allocating memory
-        printf("The Tiny-C-Interpreter could not allocate (%d) for source area\n", poolSize);
+        printf("The Tiny-C-Interpreter could not allocate (%lld) for source area\n", poolSize);
         return -1;
     }
 
@@ -1127,7 +1946,7 @@ int main(int argc, char **argv)
     if ((i = read(fd, src, poolSize - 1)) <= 0)
     {
         // Error reading
-        printf("The read() return %d\n", i);
+        printf("The read() function return %lld\n", i);
         return -1;
     }
 
@@ -1135,8 +1954,31 @@ int main(int argc, char **argv)
     src[i] = 0;
     close(fd);
 
-
     program();
 
+    if( !(pc = (int *)id_main[Value]) )
+    {
+        printf("The main() function not defined\n");
+        return -1;
+    }
+
+    if( assembly )
+    {
+        return 0;
+    }
+
+    // Setting stack
+    sp = (int *)((int)stack + poolSize);
+    *--sp = EXIT; // call exit if main returns
+    *--sp = PUSH; 
+
+    tmp = sp;
+
+    *--sp = argc;
+    *--sp = (int)argv;
+    *--sp = (int)tmp;
+
     return eval();
+
 }
+
